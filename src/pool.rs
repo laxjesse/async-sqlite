@@ -62,6 +62,11 @@ impl PoolBuilder {
         self
     }
 
+    pub fn with_flags(mut self, flags: OpenFlags) -> Self {
+        self.flags.insert(flags);
+        self
+    }
+
     /// Specify the [`JournalMode`] to set when opening a new connection.
     ///
     /// By default, no `journal_mode` is explicity set.

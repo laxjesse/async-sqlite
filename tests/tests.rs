@@ -13,7 +13,7 @@ fn test_blocking_client() {
         .conn_blocking(|conn| {
             conn.execute(
                 "CREATE TABLE testing (id INTEGER PRIMARY KEY, val TEXT NOT NULL)",
-                (),
+                [],
             )?;
             conn.execute("INSERT INTO testing VALUES (1, ?)", ["value1"])
         })
@@ -43,7 +43,7 @@ fn test_blocking_pool() {
     pool.conn_blocking(|conn| {
         conn.execute(
             "CREATE TABLE testing (id INTEGER PRIMARY KEY, val TEXT NOT NULL)",
-            (),
+            [],
         )?;
         conn.execute("INSERT INTO testing VALUES (1, ?)", ["value1"])
     })
@@ -93,7 +93,7 @@ async fn test_journal_mode() {
         .await
         .expect("client unable to be opened");
     let mode: String = client
-        .conn(|conn| conn.query_row("PRAGMA journal_mode", (), |row| row.get(0)))
+        .conn(|conn| conn.query_row("PRAGMA journal_mode", [], |row| row.get(0)))
         .await
         .expect("client unable to fetch journal_mode");
     assert_eq!(mode, "wal");
@@ -111,7 +111,7 @@ async fn test_concurrency() {
         .conn(|conn| {
             conn.execute(
                 "CREATE TABLE testing (id INTEGER PRIMARY KEY, val TEXT NOT NULL)",
-                (),
+                [],
             )?;
             conn.execute("INSERT INTO testing VALUES (1, ?)", ["value1"])
         })
@@ -145,7 +145,7 @@ async fn test_pool() {
     pool.conn(|conn| {
         conn.execute(
             "CREATE TABLE testing (id INTEGER PRIMARY KEY, val TEXT NOT NULL)",
-            (),
+            [],
         )?;
         conn.execute("INSERT INTO testing VALUES (1, ?)", ["value1"])
     })
