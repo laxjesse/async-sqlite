@@ -1,4 +1,4 @@
-use async_sqlite::{ClientBuilder, Error, JournalMode, PoolBuilder};
+use async_sqlite::{ClientBuilder, Error, JournalMode, PoolBuilder, Synchronous};
 
 #[test]
 fn test_blocking_client() {
@@ -81,6 +81,7 @@ macro_rules! async_test {
 }
 
 async_test!(test_journal_mode);
+async_test!(test_sync_mode);
 async_test!(test_concurrency);
 async_test!(test_pool);
 
@@ -100,6 +101,23 @@ async fn test_journal_mode() {
     assert_eq!(mode, "wal");
 }
 
+async fn test_sync_mode() {
+    let tmp_dir = tempfile::tempdir().unwrap();
+    let sync_mode = Synchronous::OFF;
+    let client = ClientBuilder::new()
+        .synchronous(sync_mode)
+        .path(tmp_dir.path().join("sqlite.db"))
+        .open()
+        .await
+        .expect("client unable to be opened");
+    let mode: i32 = client
+        .conn(|conn| conn.query_row("PRAGMA synchronous", [], |row| row.get(0)))
+        .await
+        .expect("client error")
+        .expect("client unable to fetch synchronous");
+    assert_eq!(mode, sync_mode as i32);
+}
+
 async fn test_concurrency() {
     let tmp_dir = tempfile::tempdir().unwrap();
     let client = ClientBuilder::new()
@@ -117,6 +135,7 @@ async fn test_concurrency() {
             conn.execute("INSERT INTO testing VALUES (1, ?)", ["value1"])
         })
         .await
+        .expect("writing schema and seed data")
         .expect("writing schema and seed data");
 
     let fs = (0..10).map(|_| {
@@ -152,6 +171,7 @@ async fn test_pool() {
         conn.execute("INSERT INTO testing VALUES (1, ?)", ["value1"])
     })
     .await
+    .expect("writing schema and seed data")
     .expect("writing schema and seed data");
 
     let fs = (0..10).map(|_| {

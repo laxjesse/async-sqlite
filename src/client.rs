@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     path::{Path, PathBuf},
+    str::FromStr,
     thread,
 };
 
@@ -34,6 +35,7 @@ pub struct ClientBuilder {
     pub(crate) path: Option<PathBuf>,
     pub(crate) flags: OpenFlags,
     pub(crate) journal_mode: Option<JournalMode>,
+    pub(crate) synchronous: Option<Synchronous>,
     pub(crate) vfs: Option<String>,
     pub(crate) pragmas: Vec<(Cow<'static, str>, Cow<'static, str>)>,
 }
@@ -65,6 +67,14 @@ impl ClientBuilder {
     /// By default, no `journal_mode` is explicity set.
     pub fn journal_mode(mut self, journal_mode: JournalMode) -> Self {
         self.journal_mode = Some(journal_mode);
+        self
+    }
+
+    /// Specify the [`SyncMode`] to set when opening a new connection.
+    ///
+    /// By default, no `sync_mode` is explicity set.
+    pub fn synchronous(mut self, synchronous: Synchronous) -> Self {
+        self.synchronous = Some(synchronous);
         self
     }
 
@@ -188,6 +198,24 @@ impl Client {
                     name: "journal_mode".into(),
                     exp: val.into(),
                     got: out,
+                });
+            }
+        }
+
+        if let Some(synchronous) = builder.synchronous.take() {
+            let val = synchronous.as_str();
+
+            conn.pragma_update(None, "synchronous", val)?;
+            let out: i32 = conn.pragma_query_value(None, "synchronous", |row| row.get(0))?;
+            if out != synchronous as i32 {
+                let got = Synchronous::from_i32(out)
+                    .map(|s| s.as_str().into())
+                    .unwrap_or_else(|invalid| format!("Invalid: {invalid}").into());
+
+                return Err(Error::PragmaUpdate {
+                    name: "synchronous".into(),
+                    exp: val.into(),
+                    got,
                 });
             }
         }
@@ -317,6 +345,52 @@ impl JournalMode {
             Self::Memory => "MEMORY",
             Self::Wal => "WAL",
             Self::Off => "OFF",
+        }
+    }
+}
+
+/// The sqlite synchronous mode.
+///
+/// For more information, please see the [sqlite docs](https://www.sqlite.org/pragma.html#pragma_synchronous)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Synchronous {
+    EXTRA = 3,
+    FULL = 2,
+    NORMAL = 1,
+    OFF = 0,
+}
+
+impl Synchronous {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::EXTRA => "EXTRA",
+            Self::FULL => "FULL",
+            Self::NORMAL => "NORMAL",
+            Self::OFF => "OFF",
+        }
+    }
+
+    fn from_i32(value: i32) -> Result<Self, i32> {
+        match value {
+            3 => Ok(Self::EXTRA),
+            2 => Ok(Self::FULL),
+            1 => Ok(Self::NORMAL),
+            0 => Ok(Self::OFF),
+            _ => Err(value),
+        }
+    }
+}
+
+impl FromStr for Synchronous {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "EXTRA" => Ok(Self::EXTRA),
+            "FULL" => Ok(Self::FULL),
+            "NORMAL" => Ok(Self::NORMAL),
+            "OFF" => Ok(Self::OFF),
+            _ => return Err(()),
         }
     }
 }

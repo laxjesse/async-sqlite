@@ -9,7 +9,7 @@ use std::{
     thread::available_parallelism,
 };
 
-use crate::{Client, ClientBuilder, Error, JournalMode};
+use crate::{client::Synchronous, Client, ClientBuilder, Error, JournalMode};
 
 use futures_util::future::join_all;
 use rusqlite::{Connection, OpenFlags};
@@ -37,6 +37,7 @@ pub struct PoolBuilder {
     path: Option<PathBuf>,
     flags: OpenFlags,
     journal_mode: Option<JournalMode>,
+    synchronous: Option<Synchronous>,
     vfs: Option<String>,
     pragmas: Vec<(Cow<'static, str>, Cow<'static, str>)>,
     num_conns: Option<usize>,
@@ -74,6 +75,14 @@ impl PoolBuilder {
     /// By default, no `journal_mode` is explicity set.
     pub fn journal_mode(mut self, journal_mode: JournalMode) -> Self {
         self.journal_mode = Some(journal_mode);
+        self
+    }
+
+    /// Specify the [`SyncMode`] to set when opening a new connection.
+    ///
+    /// By default, no `synchronous` is explicity set.
+    pub fn synchronous(mut self, synchronous: Synchronous) -> Self {
+        self.synchronous = Some(synchronous);
         self
     }
 
@@ -119,6 +128,7 @@ impl PoolBuilder {
                 path: self.path.clone(),
                 flags: self.flags,
                 journal_mode: self.journal_mode,
+                synchronous: self.synchronous,
                 vfs: self.vfs.clone(),
                 pragmas: self.pragmas.clone(),
             }
@@ -156,6 +166,7 @@ impl PoolBuilder {
                     path: self.path.clone(),
                     flags: self.flags,
                     journal_mode: self.journal_mode,
+                    synchronous: self.synchronous,
                     vfs: self.vfs.clone(),
                     pragmas: self.pragmas.clone(),
                 }
