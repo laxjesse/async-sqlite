@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     num::NonZeroUsize,
+    ops::Deref,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering::Relaxed},
@@ -98,6 +99,14 @@ impl PoolBuilder {
         K: Into<Cow<'static, str>>,
         V: Into<Cow<'static, str>>,
     {
+        let key: Cow<'static, str> = key.into();
+        let value: Cow<'static, str> = value.into();
+        match key.deref() {
+            "journal_mode" | "synchronous" => {
+                panic!("pragma {key} should be set with the corresponding method")
+            }
+            _ => (),
+        }
         self.pragmas.push((key.into(), value.into()));
         self
     }
