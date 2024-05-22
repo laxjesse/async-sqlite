@@ -95,6 +95,7 @@ async fn test_journal_mode() {
     let mode: String = client
         .conn(|conn| conn.query_row("PRAGMA journal_mode", [], |row| row.get(0)))
         .await
+        .expect("client error")
         .expect("client unable to fetch journal_mode");
     assert_eq!(mode, "wal");
 }
@@ -123,13 +124,14 @@ async fn test_concurrency() {
             let val: String =
                 conn.query_row("SELECT val FROM testing WHERE id=?", [1], |row| row.get(0))?;
             assert_eq!(val, "value1");
-            Ok(())
+            Ok::<(), rusqlite::Error>(())
         })
     });
     futures_util::future::join_all(fs)
         .await
         .into_iter()
-        .collect::<Result<(), Error>>()
+        .collect::<Result<Result<(), _>, Error>>()
+        .expect("client error")
         .expect("collecting query results");
 }
 
@@ -157,12 +159,13 @@ async fn test_pool() {
             let val: String =
                 conn.query_row("SELECT val FROM testing WHERE id=?", [1], |row| row.get(0))?;
             assert_eq!(val, "value1");
-            Ok(())
+            Ok::<(), rusqlite::Error>(())
         })
     });
     futures_util::future::join_all(fs)
         .await
         .into_iter()
-        .collect::<Result<(), Error>>()
+        .collect::<Result<Result<(), _>, Error>>()
+        .expect("client error")
         .expect("collecting query results");
 }

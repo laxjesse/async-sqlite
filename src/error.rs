@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 /// Enum of all possible errors.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -6,8 +8,8 @@ pub enum Error {
     Closed,
     /// Error updating PRAGMA.
     PragmaUpdate {
-        name: &'static str,
-        exp: &'static str,
+        name: Cow<'static, str>,
+        exp: Cow<'static, str>,
         got: String,
     },
     /// Represents a [`rusqlite::Error`].

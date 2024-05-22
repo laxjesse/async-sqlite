@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     path::{Path, PathBuf},
     thread,
 };
@@ -34,6 +35,7 @@ pub struct ClientBuilder {
     pub(crate) flags: OpenFlags,
     pub(crate) journal_mode: Option<JournalMode>,
     pub(crate) vfs: Option<String>,
+    pub(crate) pragmas: Vec<(Cow<'static, str>, Cow<'static, str>)>,
 }
 
 impl ClientBuilder {
@@ -183,40 +185,54 @@ impl Client {
                 conn.pragma_update_and_check(None, "journal_mode", val, |row| row.get(0))?;
             if !out.eq_ignore_ascii_case(val) {
                 return Err(Error::PragmaUpdate {
-                    name: "journal_mode",
-                    exp: val,
+                    name: "journal_mode".into(),
+                    exp: val.into(),
                     got: out,
                 });
             }
+        }
+
+        for (pragma_name, pragma_value) in builder.pragmas {
+            // Only a few pragmas automatically return the updated value, and the
+            // types are not all the same, so we don't check that pragmas match.
+            conn.pragma_update(None, &pragma_name, &pragma_value)?;
         }
 
         Ok(conn)
     }
 
     /// Invokes the provided function with a [`rusqlite::Connection`].
-    pub async fn conn<F, T>(&self, func: F) -> Result<T, Error>
+    pub async fn conn<F, T, E>(&self, func: F) -> Result<Result<T, E>, Error>
     where
-        F: FnOnce(&Connection) -> Result<T, rusqlite::Error> + Send + 'static,
+        F: FnOnce(&Connection) -> Result<T, E> + Send + 'static,
+        E: From<rusqlite::Error> + Send + 'static,
         T: Send + 'static,
     {
         let (tx, rx) = oneshot::channel();
-        self.conn_tx.send(Command::Func(Box::new(move |conn| {
-            _ = tx.send(func(conn));
-        })))?;
-        Ok(rx.await??)
+        self.conn_tx
+            .send(Command::Func(Box::new(move |conn| {
+                _ = tx.send(func(conn));
+            })))
+            .map_err(Error::from)?;
+        let out = rx.await.map_err(Error::from)?;
+        Ok(out)
     }
 
     /// Invokes the provided function with a mutable [`rusqlite::Connection`].
-    pub async fn conn_mut<F, T>(&self, func: F) -> Result<T, Error>
+    pub async fn conn_mut<F, T, E>(&self, func: F) -> Result<Result<T, E>, Error>
     where
-        F: FnOnce(&mut Connection) -> Result<T, rusqlite::Error> + Send + 'static,
+        F: FnOnce(&mut Connection) -> Result<T, E> + Send + 'static,
+        E: From<rusqlite::Error> + Send + 'static,
         T: Send + 'static,
     {
         let (tx, rx) = oneshot::channel();
-        self.conn_tx.send(Command::Func(Box::new(move |conn| {
-            _ = tx.send(func(conn));
-        })))?;
-        Ok(rx.await??)
+        self.conn_tx
+            .send(Command::Func(Box::new(move |conn| {
+                _ = tx.send(func(conn));
+            })))
+            .map_err(Error::from)?;
+        let out = rx.await.map_err(Error::from)?;
+        Ok(out)
     }
 
     /// Closes the underlying sqlite connection.

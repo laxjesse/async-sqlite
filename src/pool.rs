@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     num::NonZeroUsize,
     path::{Path, PathBuf},
     sync::{
@@ -37,6 +38,7 @@ pub struct PoolBuilder {
     flags: OpenFlags,
     journal_mode: Option<JournalMode>,
     vfs: Option<String>,
+    pragmas: Vec<(Cow<'static, str>, Cow<'static, str>)>,
     num_conns: Option<usize>,
 }
 
@@ -81,6 +83,16 @@ impl PoolBuilder {
         self
     }
 
+    /// Sets custom initial pragma for the database connection.
+    pub fn pragma<K, V>(mut self, key: K, value: V) -> Self
+    where
+        K: Into<Cow<'static, str>>,
+        V: Into<Cow<'static, str>>,
+    {
+        self.pragmas.push((key.into(), value.into()));
+        self
+    }
+
     /// Specify the number of sqlite connections to open as part of the pool.
     ///
     /// Defaults to the number of logical CPUs of the current system.
@@ -108,6 +120,7 @@ impl PoolBuilder {
                 flags: self.flags,
                 journal_mode: self.journal_mode,
                 vfs: self.vfs.clone(),
+                pragmas: self.pragmas.clone(),
             }
             .open()
         });
@@ -144,6 +157,7 @@ impl PoolBuilder {
                     flags: self.flags,
                     journal_mode: self.journal_mode,
                     vfs: self.vfs.clone(),
+                    pragmas: self.pragmas.clone(),
                 }
                 .open_blocking()
             })
@@ -180,18 +194,20 @@ struct State {
 
 impl Pool {
     /// Invokes the provided function with a [`rusqlite::Connection`].
-    pub async fn conn<F, T>(&self, func: F) -> Result<T, Error>
+    pub async fn conn<F, T, E>(&self, func: F) -> Result<Result<T, E>, Error>
     where
-        F: FnOnce(&Connection) -> Result<T, rusqlite::Error> + Send + 'static,
+        F: FnOnce(&Connection) -> Result<T, E> + Send + 'static,
+        E: From<rusqlite::Error> + Send + 'static,
         T: Send + 'static,
     {
         self.get().conn(func).await
     }
 
     /// Invokes the provided function with a mutable [`rusqlite::Connection`].
-    pub async fn conn_mut<F, T>(&self, func: F) -> Result<T, Error>
+    pub async fn conn_mut<F, T, E>(&self, func: F) -> Result<Result<T, E>, Error>
     where
-        F: FnOnce(&mut Connection) -> Result<T, rusqlite::Error> + Send + 'static,
+        F: FnOnce(&mut Connection) -> Result<T, E> + Send + 'static,
+        E: From<rusqlite::Error> + Send + 'static,
         T: Send + 'static,
     {
         self.get().conn_mut(func).await
