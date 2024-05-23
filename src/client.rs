@@ -129,6 +129,11 @@ pub struct Client {
 }
 
 impl Client {
+    /// Returns the number of messages in the channel.
+    pub(crate) fn len(&self) -> usize {
+        self.conn_tx.len()
+    }
+
     async fn open_async(builder: ClientBuilder) -> Result<Self, Error> {
         let (open_tx, open_rx) = oneshot::channel();
         Self::open(builder, |res| {

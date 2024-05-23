@@ -3,10 +3,7 @@ use std::{
     num::NonZeroUsize,
     ops::Deref,
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicU64, Ordering::Relaxed},
-        Arc,
-    },
+    sync::Arc,
     thread::available_parallelism,
 };
 
@@ -148,10 +145,7 @@ impl PoolBuilder {
             .into_iter()
             .collect::<Result<Vec<Client>, Error>>()?;
         Ok(Pool {
-            state: Arc::new(State {
-                clients,
-                counter: AtomicU64::new(0),
-            }),
+            state: Arc::new(State { clients }),
         })
     }
 
@@ -183,10 +177,7 @@ impl PoolBuilder {
             })
             .collect::<Result<Vec<Client>, Error>>()?;
         Ok(Pool {
-            state: Arc::new(State {
-                clients,
-                counter: AtomicU64::new(0),
-            }),
+            state: Arc::new(State { clients }),
         })
     }
 
@@ -209,7 +200,6 @@ pub struct Pool {
 
 struct State {
     clients: Vec<Client>,
-    counter: AtomicU64,
 }
 
 impl Pool {
@@ -276,7 +266,9 @@ impl Pool {
     }
 
     fn get(&self) -> &Client {
-        let n = self.state.counter.fetch_add(1, Relaxed);
-        &self.state.clients[n as usize % self.state.clients.len()]
+        let client_iter = self.state.clients.iter();
+        client_iter
+            .min_by(|x, y| x.len().cmp(&y.len()))
+            .expect("clients should not be empty")
     }
 }
