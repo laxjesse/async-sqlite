@@ -11,6 +11,8 @@ use crossbeam_channel::{bounded, unbounded, Sender};
 use futures_channel::oneshot;
 use rusqlite::{Connection, OpenFlags};
 
+const DEFAULT_PREPARED_STATEMENT_CACHE_CAPACITY: usize = 64;
+
 /// A `ClientBuilder` can be used to create a [`Client`] with custom
 /// configuration.
 ///
@@ -231,6 +233,8 @@ impl Client {
             conn.pragma_update(None, &pragma_name, &pragma_value)?;
         }
 
+        // TODO: make this configurable.
+        conn.set_prepared_statement_cache_capacity(DEFAULT_PREPARED_STATEMENT_CACHE_CAPACITY);
         Ok(conn)
     }
 
