@@ -25,7 +25,7 @@
 //!
 //! let value: String = client.conn(|conn| {
 //!     conn.query_row("SELECT val FROM testing WHERE id=?", [1], |row| row.get(0))
-//! }).await?;
+//! }).await??;
 //!
 //! println!("Value is: {value}");
 //! # Ok(())
@@ -49,7 +49,7 @@
 //!
 //! let value: String = pool.conn(|conn| {
 //!     conn.query_row("SELECT val FROM testing WHERE id=?", [1], |row| row.get(0))
-//! }).await?;
+//! }).await??;
 //!
 //! println!("Value is: {value}");
 //! # Ok(())
