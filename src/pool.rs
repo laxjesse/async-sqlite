@@ -268,7 +268,7 @@ impl Pool {
     fn get(&self) -> &Client {
         let client_iter = self.state.clients.iter();
         client_iter
-            .min_by(|x, y| x.len().cmp(&y.len()))
+            .min_by_key(|client| client.len())
             .expect("clients should not be empty")
     }
 }
