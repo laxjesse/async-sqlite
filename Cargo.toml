@@ -42,6 +42,7 @@ vtab = ["rusqlite/vtab"]
 window = ["rusqlite/window"]
 
 [dependencies]
+async-lock = "3.3.0"
 crossbeam-channel = { version = "0.5.9" }
 futures-channel = { version = "0.3.29" }
 futures-util = { version = "0.3.29" }

@@ -9,6 +9,7 @@ use std::{
 
 use crate::{client::Synchronous, Client, ClientBuilder, Error, JournalMode};
 
+use async_lock::{Semaphore, SemaphoreGuard};
 use futures_util::future::join_all;
 use rusqlite::{Connection, OpenFlags};
 
@@ -145,7 +146,10 @@ impl PoolBuilder {
             .into_iter()
             .collect::<Result<Vec<Client>, Error>>()?;
         Ok(Pool {
-            state: Arc::new(State { clients }),
+            state: Arc::new(State {
+                clients,
+                semaphore: Semaphore::new(num_conns + num_conns.div_ceil(4)),
+            }),
         })
     }
 
@@ -177,7 +181,10 @@ impl PoolBuilder {
             })
             .collect::<Result<Vec<Client>, Error>>()?;
         Ok(Pool {
-            state: Arc::new(State { clients }),
+            state: Arc::new(State {
+                clients,
+                semaphore: Semaphore::new(num_conns + num_conns.div_ceil(4)),
+            }),
         })
     }
 
@@ -200,6 +207,7 @@ pub struct Pool {
 
 struct State {
     clients: Vec<Client>,
+    semaphore: Semaphore,
 }
 
 impl Pool {
@@ -210,7 +218,8 @@ impl Pool {
         E: From<rusqlite::Error> + Send + 'static,
         T: Send + 'static,
     {
-        self.get().conn(func).await
+        let (client, _permit) = self.get().await;
+        client.conn(func).await
     }
 
     /// Invokes the provided function with a mutable [`rusqlite::Connection`].
@@ -220,7 +229,8 @@ impl Pool {
         E: From<rusqlite::Error> + Send + 'static,
         T: Send + 'static,
     {
-        self.get().conn_mut(func).await
+        let (client, _permit) = self.get().await;
+        client.conn_mut(func).await
     }
 
     /// Closes the underlying sqlite connections.
@@ -241,7 +251,8 @@ impl Pool {
         F: FnOnce(&Connection) -> Result<T, rusqlite::Error> + Send + 'static,
         T: Send + 'static,
     {
-        self.get().conn_blocking(func)
+        let (client, _permit) = self.get_blocking();
+        client.conn_blocking(func)
     }
 
     /// Invokes the provided function with a mutable [`rusqlite::Connection`],
@@ -251,7 +262,8 @@ impl Pool {
         F: FnOnce(&mut Connection) -> Result<T, rusqlite::Error> + Send + 'static,
         T: Send + 'static,
     {
-        self.get().conn_mut_blocking(func)
+        let (client, _permit) = self.get_blocking();
+        client.conn_mut_blocking(func)
     }
 
     /// Closes the underlying sqlite connections, blocking the current thread.
@@ -265,7 +277,19 @@ impl Pool {
             .try_for_each(|client| client.close_blocking())
     }
 
-    fn get(&self) -> &Client {
+    async fn get(&self) -> (&Client, SemaphoreGuard<'_>) {
+        let permit = self.state.semaphore.acquire().await;
+        let client = self.find_client();
+        (client, permit)
+    }
+
+    fn get_blocking(&self) -> (&Client, SemaphoreGuard<'_>) {
+        let permit = self.state.semaphore.acquire_blocking();
+        let client = self.find_client();
+        (client, permit)
+    }
+
+    fn find_client(&self) -> &Client {
         let client_iter = self.state.clients.iter();
         client_iter
             .min_by_key(|client| client.len())
